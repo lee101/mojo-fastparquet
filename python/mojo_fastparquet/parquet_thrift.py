@@ -1,0 +1,14 @@
+"""Small subset of Parquet thrift enums needed by the codec API."""
+
+from enum import IntEnum
+
+
+class Type(IntEnum):
+    BOOLEAN = 0
+    INT32 = 1
+    INT64 = 2
+    INT96 = 3
+    FLOAT = 4
+    DOUBLE = 5
+    BYTE_ARRAY = 6
+    FIXED_LEN_BYTE_ARRAY = 7
