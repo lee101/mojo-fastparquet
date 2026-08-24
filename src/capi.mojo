@@ -1,6 +1,5 @@
 """Parquet primitive codecs exposed through a small C ABI."""
 
-from std.algorithm import parallelize
 from std.ffi import external_call
 from std.memory import bitcast
 from std.sys.info import simd_width_of
@@ -9,8 +8,6 @@ comptime BPtr = UnsafePointer[UInt8, AnyOrigin[mut=True]]
 comptime I32Ptr = UnsafePointer[Int32, AnyOrigin[mut=True]]
 comptime I64Ptr = UnsafePointer[Int64, AnyOrigin[mut=True]]
 comptime ObjPtr = UnsafePointer[Int, AnyOrigin[mut=True]]
-comptime PARALLEL_THRESHOLD = 1_000_000
-comptime PARALLEL_WORKERS = 4
 
 
 def _varint_size(value: UInt64) -> Int:
@@ -205,20 +202,7 @@ def mfp_encode_bitpacked(
         return -2
     var whole = n - (n % 8)
     var whole_groups = whole // 8
-    if n >= PARALLEL_THRESHOLD and whole_groups >= PARALLEL_WORKERS:
-        def encode_task(task: Int) capturing:
-            var group_begin = task * whole_groups // PARALLEL_WORKERS
-            var group_end = (task + 1) * whole_groups // PARALLEL_WORKERS
-            _pack_values(
-                values + group_begin * 8,
-                dst + pos + group_begin * width,
-                (group_end - group_begin) * 8,
-                width,
-            )
-
-        parallelize[encode_task](PARALLEL_WORKERS, PARALLEL_WORKERS)
-    else:
-        _pack_values(values, dst + pos, whole, width)
+    _pack_values(values, dst + pos, whole, width)
     if whole < n:
         _pack_values(
             values + whole,
