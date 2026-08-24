@@ -42,7 +42,7 @@ def test_overflowing_unsigned_varint_is_rejected():
         ours.read_unsigned_var_int(ours.NumpyIO(payload))
 
 
-@pytest.mark.parametrize("width", [0, 1, 2, 3, 7, 8, 9, 16, 24])
+@pytest.mark.parametrize("width", [0, 1, 2, 3, 7, 8, 9, 10, 16, 24])
 @pytest.mark.parametrize("count", [1, 7, 8, 9, 33])
 def test_encode_bitpacked_byte_parity(width, count):
     rng = np.random.default_rng(width * 100 + count)
@@ -178,7 +178,7 @@ def test_boolean_unpack_simd_and_scalar_tails(count):
 
 
 @pytest.mark.parametrize("count", [999_992, 1_000_000])
-def test_encode_parallel_threshold_parity(count):
+def test_encode_large_input_parity(count):
     values = np.arange(count, dtype=np.int32) & 1023
     left = np.empty(16 + count * 10 // 8, dtype=np.uint8)
     right = np.empty_like(left)

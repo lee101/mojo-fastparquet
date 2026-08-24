@@ -84,22 +84,29 @@ repository activation environment, which adds `python/` to `PYTHONPATH`.
 
 ## Benchmarks
 
-Measured on 2026-07-29 on an Intel Xeon E5-2697 v4 at 2.30 GHz, Linux x86-64,
+Measured on 2026-08-24 on an Intel Xeon E5-2697 v4 at 2.30 GHz, Linux x86-64,
 using fastparquet 2026.5.0. Each row is the best of five warmed runs on the
 same preallocated input and output buffers. The only supported benchmark
 command is `pixi run bench`; it takes a machine-wide lock.
 
 | Kernel | Mojo | fastparquet | Mojo speedup |
 |---|---:|---:|---:|
-| hybrid bit-pack encode, 5M uint10 | 19.20 ms | 14.95 ms | 0.78x |
-| hybrid bit-pack decode, 5M uint10 | 10.47 ms | 20.91 ms | 2.00x |
-| PLAIN boolean decode, 20M values | 3.34 ms | 2.60 ms | 0.78x |
-| delta binary decode, 1M int64 | 2.65 ms | 14.39 ms | 5.43x |
-| PLAIN byte-array decode, 200K | 12.58 ms | 13.46 ms | 1.07x |
+| hybrid bit-pack encode, 5M uint10 | 8.25 ms | 14.33 ms | 1.74x |
+| hybrid bit-pack decode, 5M uint10 | 11.35 ms | 21.86 ms | 1.93x |
+| PLAIN boolean decode, 20M values | 1.25 ms | 1.45 ms | 1.16x |
+| delta binary decode, 1M int64 | 2.30 ms | 8.95 ms | 3.89x |
+| PLAIN byte-array decode, 200K | 8.49 ms | 9.20 ms | 1.08x |
 
-On this run Mojo was slower for bit-pack encoding and boolean decoding, and
-faster for the other three measured kernels. These are local best-case kernel
-timings, not end-to-end Parquet file-read results.
+Mojo was faster for all five kernels on this run. These are local best-case
+kernel timings, not end-to-end Parquet file-read results.
+
+No GPU path is provided. These codecs move substantially more data than the
+bit operations they perform: uint10 packing is below 0.5 operations per byte,
+BOOLEAN expansion is below 1 operation per byte, and the decoders are similarly
+bandwidth- or dependency-bound. They are below the roughly 2 operations per
+byte needed to justify transfer and launch overhead on the available GPU. The
+optimized CPU loops are serial; the benchmark-sized encoder completes quickly
+enough that this build does not add a heavier parallel runtime dependency.
 
 ## How it works
 
@@ -116,11 +123,14 @@ Parquet bit streams are little-endian within each byte. The hybrid decoder
 uses a rolling 64-bit reservoir for widths up to 32, writes either packed
 `uint8` levels or native-endian `int32` indices, and returns both consumed and
 produced positions to the `NumpyIO` wrapper. Bit-pack encoding validates with
-SIMD and uses four workers above one million values. BOOLEAN unpacking expands
-multiple source bytes per SIMD operation and handles remaining bytes and bits
-with scalar tails. Delta miniblocks use the same reservoir and accumulate
-zigzag-decoded minimum deltas directly into caller-owned int32 or int64 arrays.
-PLAIN numeric reads stay zero-copy NumPy views.
+SIMD, including a scalar tail, and packs each uint10 group with one unaligned
+64-bit store plus one unaligned 16-bit store. Already-contiguous int32 input is
+passed through the FFI without a copy or redundant NumPy range scans. BOOLEAN
+unpacking expands multiple source bytes per SIMD operation, unrolls the vector
+loop fourfold, and handles remaining bytes and bits with scalar tails. Delta
+miniblocks use the same reservoir and accumulate zigzag-decoded minimum deltas
+directly into caller-owned int32 or int64 arrays. PLAIN numeric reads stay
+zero-copy NumPy views.
 
 The pytest suite compares encoded bytes, decoded arrays, dtypes, stream
 positions, and error behavior with the installed upstream fastparquet. Wide

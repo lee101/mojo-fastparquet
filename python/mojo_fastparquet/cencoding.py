@@ -114,7 +114,9 @@ def encode_bitpacked(values: Any, width: int, o: NumpyIO) -> None:
     raw = np.asarray(values)
     if raw.dtype.kind not in "iub":
         raise TypeError("bit-packed values must be integers")
-    if raw.size and (raw.min() < 0 or raw.max() > np.iinfo(np.int32).max):
+    if raw.dtype != np.dtype(np.int32) and raw.size and (
+        raw.min() < 0 or raw.max() > np.iinfo(np.int32).max
+    ):
         raise OverflowError("bit-packed value is outside int32")
     data = np.ascontiguousarray(raw, dtype=np.int32)
     _require_writable(o)

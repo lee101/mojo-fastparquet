@@ -99,6 +99,26 @@ def _pack_values(values: I32Ptr, dst: BPtr, n: Int, width: Int):
         dst[pos] = UInt8(bits & 255)
 
 
+def _pack_width_10(values: I32Ptr, dst: BPtr, groups: Int):
+    for group in range(groups):
+        var base = group * 8
+        var low = (
+            UInt64(values[base])
+            | (UInt64(values[base + 1]) << 10)
+            | (UInt64(values[base + 2]) << 20)
+            | (UInt64(values[base + 3]) << 30)
+            | (UInt64(values[base + 4]) << 40)
+            | (UInt64(values[base + 5]) << 50)
+            | ((UInt64(values[base + 6]) & 15) << 60)
+        )
+        var high = UInt16(
+            (UInt32(values[base + 6]) >> 4)
+            | (UInt32(values[base + 7]) << 6)
+        )
+        (dst + group * 10).bitcast[UInt64]().store[alignment=1](0, low)
+        (dst + group * 10 + 8).bitcast[UInt16]().store[alignment=1](0, high)
+
+
 def _values_fit_width(values: I32Ptr, n: Int, width: Int) -> Bool:
     comptime W = simd_width_of[DType.int32]()
     var i = 0
@@ -117,7 +137,19 @@ def _values_fit_width(values: I32Ptr, n: Int, width: Int) -> Bool:
 
 def _expand_bool_bytes(src: BPtr, dst: BPtr, nbytes: Int):
     comptime W = simd_width_of[DType.uint64]()
+    comptime UNROLL = 4
     var i = 0
+    while i + W * UNROLL <= nbytes:
+        comptime for j in range(UNROLL):
+            var offset = i + j * W
+            var value = src.load[width=W](offset).cast[DType.uint64]()
+            value = (value | (value << 28)) & 0x0000000f0000000f
+            value = (value | (value << 14)) & 0x0003000300030003
+            value = (value | (value << 7)) & 0x0101010101010101
+            dst.store[alignment=1](
+                offset * 8, bitcast[DType.uint8, W * 8](value)
+            )
+        i += W * UNROLL
     while i + W <= nbytes:
         var value = src.load[width=W](i).cast[DType.uint64]()
         value = (value | (value << 28)) & 0x0000000f0000000f
@@ -202,7 +234,10 @@ def mfp_encode_bitpacked(
         return -2
     var whole = n - (n % 8)
     var whole_groups = whole // 8
-    _pack_values(values, dst + pos, whole, width)
+    if width == 10:
+        _pack_width_10(values, dst + pos, whole_groups)
+    else:
+        _pack_values(values, dst + pos, whole, width)
     if whole < n:
         _pack_values(
             values + whole,
