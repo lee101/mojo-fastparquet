@@ -124,7 +124,7 @@ def _values_fit_width(values: I32Ptr, n: Int, width: Int) -> Bool:
     var i = 0
     var limit = Int64(_mask(width))
     while i + W <= n:
-        var chunk = values.load[width=W](i)
+        var chunk = values.unsafe_load[width=W](i)
         if chunk.reduce_min()[0] < 0 or Int64(chunk.reduce_max()[0]) > limit:
             return False
         i += W
@@ -142,7 +142,7 @@ def _expand_bool_bytes(src: BPtr, dst: BPtr, nbytes: Int):
     while i + W * UNROLL <= nbytes:
         comptime for j in range(UNROLL):
             var offset = i + j * W
-            var value = src.load[width=W](offset).cast[DType.uint64]()
+            var value = src.unsafe_load[width=W](offset).cast[DType.uint64]()
             value = (value | (value << 28)) & 0x0000000f0000000f
             value = (value | (value << 14)) & 0x0003000300030003
             value = (value | (value << 7)) & 0x0101010101010101
@@ -151,7 +151,7 @@ def _expand_bool_bytes(src: BPtr, dst: BPtr, nbytes: Int):
             )
         i += W * UNROLL
     while i + W <= nbytes:
-        var value = src.load[width=W](i).cast[DType.uint64]()
+        var value = src.unsafe_load[width=W](i).cast[DType.uint64]()
         value = (value | (value << 28)) & 0x0000000f0000000f
         value = (value | (value << 14)) & 0x0003000300030003
         value = (value | (value << 7)) & 0x0101010101010101
